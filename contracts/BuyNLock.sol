@@ -12,14 +12,12 @@ contract BuyNLock is Ownable, Pausable {
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
 
-    uint256 constant MAX_LOCK_TIME = 60 * 60 * 24 * 60; // 60 days
+    uint256 constant MAX_LOCK_TIME = 60 * 60 * 24 * 30; // 30 days
     uint256 constant MAX_UNLOCKS_PER_TX = 500;
 
-    address[] public swapPath;
+    IERC20 public immutable buyingToken;
     uint24 public lockTime;
-    IUniswapV2Router02 public uniswapRouter;
-    IERC20 public sellingToken;
-    IERC20 public buyingToken;
+    IUniswapV2Router02 public immutable uniswapRouter;
 
     struct Lock {
         uint128 amount;
@@ -35,19 +33,16 @@ contract BuyNLock is Ownable, Pausable {
     mapping(address => User) public users;
 
     event LockTimeChange(uint24 oldLockTime, uint24 newLockTime);
-    event BuyAndLock(address indexed user, uint amountSold, uint amountBought, uint lockedAt);
+    event BuyAndLock(address indexed user, IERC20 indexed sellingToken, uint amountSold, uint amountBought);
     event Unlock(address indexed user, uint amountUnlocked, uint numberOfUnlocks);
 
-    constructor(address[] memory _swapPath, uint24 _lockTime, IUniswapV2Router02 _uniswapRouter) {
-        require(_swapPath.length > 1, "invalid swap path");
-        swapPath = _swapPath;
+    constructor(IERC20 _buyingToken, uint24 _lockTime, IUniswapV2Router02 _uniswapRouter) {
+        require(address(_buyingToken) != address(0), "Invalid buying token address");
+        require(address(_uniswapRouter) != address(0), "Invalid uniswap router address");
+
+        buyingToken = _buyingToken;
         lockTime = _lockTime;
         uniswapRouter = _uniswapRouter;
-
-        sellingToken = IERC20(_swapPath[0]);
-        buyingToken = IERC20(_swapPath[_swapPath.length - 1]);
-
-        sellingToken.safeIncreaseAllowance(address(_uniswapRouter), 2 ** 128);
     }
 
     function setLockTime(uint24 _lockTime) external onlyOwner {
@@ -65,10 +60,20 @@ contract BuyNLock is Ownable, Pausable {
         _unpause();
     }
 
-    function buyNLock(uint256 amountToSell, uint256 minimumAmountToBuy, uint256 swapDeadline) external whenNotPaused {
+    function whitelistSellingToken(IERC20 sellingToken) external onlyOwner {
+        require(sellingToken != buyingToken, "selling token == buying token");
+        sellingToken.safeApprove(address(uniswapRouter), 2 ** 256 - 1);
+    }
+
+    function buyForERC20(uint256 amountToSell, uint256 minimumAmountToBuy, address[] calldata swapPath, uint256 swapDeadline) external whenNotPaused {
+        require(swapPath.length > 1, "Invalid path length");
+        require(swapPath[swapPath.length - 1] == address(buyingToken), "Invalid token out");
+        IERC20 sellingToken = IERC20(swapPath[0]);
+        require(sellingToken != buyingToken, "selling token == buying token");
+
         sellingToken.safeTransferFrom(msg.sender, address(this), amountToSell);
 
-        uint256[] memory amountsOut = IUniswapV2Router01(uniswapRouter).swapExactTokensForTokens(
+        uint256[] memory amountsOut = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(
             amountToSell, 
             minimumAmountToBuy, 
             swapPath, 
@@ -76,25 +81,53 @@ contract BuyNLock is Ownable, Pausable {
             swapDeadline
         );
         uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
+        _lockBoughtTokens(amountBought);
 
-        User storage user = users[msg.sender];
-        user.lockedAmountTotal += amountBought;
-        user.locks.push(Lock(amountBought, uint48(block.timestamp)));
+        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought);
+    }
 
-        emit BuyAndLock(msg.sender, amountToSell, amountBought, block.timestamp);
+    function buyForETH(uint256 amountToSell, uint256 minimumAmountToBuy, address[] calldata swapPath, uint256 swapDeadline) external payable whenNotPaused {
+        require(swapPath.length > 1, "Invalid path length");
+        require(swapPath[swapPath.length - 1] == address(buyingToken), "Invalid token out");
+        IERC20 sellingToken = IERC20(swapPath[0]);
+        require(sellingToken != buyingToken, "selling token == buying token");
+
+        uint256[] memory amountsOut = IUniswapV2Router02(uniswapRouter).swapExactETHForTokens{ value: amountToSell }(
+            minimumAmountToBuy, 
+            swapPath, 
+            address(this), 
+            swapDeadline
+        );
+        uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
+        _lockBoughtTokens(amountBought);
+
+        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought);
     }
 
     function unlockBoughtTokens(address userAddress) external {
-        User storage user = users[userAddress];
         (uint128 unlockableAmount, uint128 unlocksCount) = getUnlockableAmount(userAddress);
         require(unlockableAmount > 0, "No unlockable amount");
 
+        _unlockBoughtTokens(userAddress, unlockableAmount, unlocksCount);
+    }
+
+    // INTERNAL 
+
+    function _lockBoughtTokens(uint128 amountBought) internal {
+        User storage user = users[msg.sender];
+        user.lockedAmountTotal += amountBought;
+        user.locks.push(Lock(amountBought, uint48(block.timestamp)));
+    }
+
+    function _unlockBoughtTokens(address userAddress, uint128 unlockableAmount, uint128 unlocksCount) internal {
+        User storage user = users[userAddress];
         user.indexToUnlock += unlocksCount;
         user.lockedAmountTotal -= unlockableAmount;
         buyingToken.safeTransfer(userAddress, unlockableAmount);
-        
         emit Unlock(userAddress, unlockableAmount, unlocksCount);
     }
+
+    // VIEW
 
     function getUnlockableAmount(address userAddress) public view returns (uint128, uint128) {
         User storage user = users[userAddress];

@@ -5,7 +5,7 @@ const IUniswapV2Router = require("@uniswap/v2-periphery/build/IUniswapV2Router02
 
 describe("BuyNLock smart contract", function() {
     
-    let owner, user1, user2, user3, contract, buyingToken, sellingToken, uniswapRouter;
+    let owner, user1, user2, user3, contract, buyingToken, sellingToken, uniswapRouter, defaultSwapPath;
 
     let lockTime = 60 * 60 * 24 * 10; // 10 days
     const uniswapRouterAddress = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
@@ -34,12 +34,11 @@ describe("BuyNLock smart contract", function() {
     }
     
     const getAmountOut = async (amountIn) => {
-        const swapPath = [sellingToken.address, buyingToken.address];
-        const amountsOut = await uniswapRouter.getAmountsOut(amountIn, swapPath);
+        const amountsOut = await uniswapRouter.getAmountsOut(amountIn, defaultSwapPath);
         return amountsOut[amountsOut.length - 1];
     }
 
-    const buyNLock = async (user, amountToSell) => {
+    const buyNLock = async (user, amountToSell, tokenType = 0, swapPath = defaultSwapPath) => {
         contract = contract.connect(user);
 
         const balance1OfContractBefore = await buyingToken.balanceOf(contract.address);
@@ -52,7 +51,7 @@ describe("BuyNLock smart contract", function() {
 
         sellingToken = sellingToken.connect(user);
         await sellingToken.approve(contract.address, amountToSell);
-        await contract.buyNLock(amountToSell, minAmountToBuy, deadline);
+        await contract.buyForERC20(amountToSell, minAmountToBuy, swapPath, deadline);
         
         const balance1OfContractAfter = await buyingToken.balanceOf(contract.address);
         const balance0OfUserAfter = await sellingToken.balanceOf(user.address);
@@ -95,6 +94,7 @@ describe("BuyNLock smart contract", function() {
         const ERC20Mock = await ethers.getContractFactory("ERC20Mock");
         sellingToken = await ERC20Mock.deploy("MOCK1", "MOCK1", owner.address, parseUnits("1000", 0), sellingTokenDecimals);
         buyingToken = await ERC20Mock.deploy("MOCK2", "MOCK2", owner.address, parseUnits("1000", 1), buyingTokenDecimals);
+        defaultSwapPath = [sellingToken.address, buyingToken.address];
 
         await sellingToken.approve(uniswapRouterAddress, parseUnits("500", 0));
         await buyingToken.approve(uniswapRouterAddress, parseUnits("500", 1));
@@ -123,19 +123,31 @@ describe("BuyNLock smart contract", function() {
 
     it("Deploys BuyNLock contract", async () => {
         const Contract = await ethers.getContractFactory("BuyNLock");
-        const swapPath = [sellingToken.address, buyingToken.address];
-        contract = await Contract.deploy(swapPath, lockTime, uniswapRouterAddress);
+        contract = await Contract.deploy(buyingToken.address, lockTime, uniswapRouterAddress);
 
         expect(await contract.owner()).to.equal(owner.address);
-        expect(await contract.swapPath(0)).to.equal(swapPath[0]);
-        expect(await contract.swapPath(1)).to.equal(swapPath[1]);
         expect(await contract.lockTime()).to.equal(lockTime);
         expect(await contract.uniswapRouter()).to.equal(uniswapRouterAddress);
-        expect(await contract.sellingToken()).to.equal(sellingToken.address);
         expect(await contract.buyingToken()).to.equal(buyingToken.address);
     });
 
+    describe("Function visibility", async() => {
+        it("Fails to call internal functions", async() => {
+            contract = contract.connect(user1);
+            expect(contract._lockBoughtTokens).to.equal(undefined);
+            expect(contract._unlockBoughtTokens).to.equal(undefined);
+        });
+    });
+
     describe("Owner functions, access control", async () => {
+        it("Only the owner can whitelist a selling token", async() => {
+            contract = contract.connect(owner);
+            await contract.whitelistSellingToken(sellingToken.address);
+
+            contract = contract.connect(user1);
+            await expect(contract.whitelistSellingToken(buyingToken.address)).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
         it("Only the owner can change the lock time", async() => {
             contract = contract.connect(owner);
             lockTime /= 2;
@@ -167,7 +179,7 @@ describe("BuyNLock smart contract", function() {
             await contract.pause();
 
             contract = contract.connect(user1);
-            await expect(contract.buyNLock(parseUnits("5", 0), 0, await getDeadline())).to.be.revertedWith("Pausable: paused");
+            await expect(contract.buyForERC20(parseUnits("5", 0), 0, defaultSwapPath, await getDeadline())).to.be.revertedWith("Pausable: paused");
 
             contract = contract.connect(owner);
             await contract.unpause();
@@ -213,38 +225,43 @@ describe("BuyNLock smart contract", function() {
             await unlockBoughtTokens(user3, 15.38, 2);
         });
 
-        it("The contract has no tokens by now", async() => {
+        it("The contract has no locked tokens by now", async() => {
             expect(await buyingToken.balanceOf(contract.address)).to.equal(0);
-            expect(await sellingToken.balanceOf(contract.address)).to.equal(0);
         });
 
-        it("A user is able to unlock instantly after the owner setting lockTime to zero", async() => {
+        it("A user is able to unlock instantly after the owner setting lockTime to zero and pausing the contract", async() => {
             await buyNLock(user1, 10);
             
             contract = contract.connect(owner);
             await contract.setLockTime(0);
+            await contract.pause();
 
             await unlockBoughtTokens(user1, 7.05, 1);
+
+            contract = contract.connect(owner);
+            await contract.unpause();
         });
 
         it("A user buys and locks 100 times and then unlocks", async() => {
             for (let i = 0; i < 100; i++) {
                 await buyNLock(user1, 0.1);
             }
-
             await unlockBoughtTokens(user1, 6.81, 100);
         });
 
-        it("Testing external reverts", async() => {
+        it("Testing invalid parameters reverts", async() => {
             contract = contract.connect(user1);
             sellingToken = sellingToken.connect(user1);
             const deadline = await getDeadline();
-
-            await expect(contract.buyNLock(0, 0, 0)).to.be.revertedWith("UniswapV2Router: EXPIRED");  
-            await expect(contract.buyNLock(0, 0, deadline)).to.be.revertedWith("UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT");  
-            await expect(contract.buyNLock(parseUnits("1", 0), parseUnits("0", 1), deadline)).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
+             
+            await expect(contract.buyForERC20(0, 0, defaultSwapPath, 0)).to.be.revertedWith("UniswapV2Router: EXPIRED");  
+            await expect(contract.buyForERC20(0, 0, defaultSwapPath, deadline)).to.be.revertedWith("UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT");  
+            await expect(contract.buyForERC20(parseUnits("1", 0), parseUnits("0", 1), defaultSwapPath, deadline)).to.be.revertedWith("ERC20: transfer amount exceeds allowance");
             await sellingToken.approve(contract.address, parseUnits("1", 0));
-            await expect(contract.buyNLock(parseUnits("1", 0), parseUnits("1", 1), deadline)).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
+            await expect(contract.buyForERC20(parseUnits("1", 0), parseUnits("1", 1), defaultSwapPath, deadline)).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
+            await expect(contract.buyForERC20(parseUnits("1", 0), parseUnits("1", 1), [], deadline)).to.be.revertedWith("Invalid path length");
+            await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, sellingToken.address], deadline)).to.be.revertedWith("Invalid token out");
+            await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, buyingToken.address], deadline)).to.be.revertedWith("selling token == buying token");
         });
     });
 });
