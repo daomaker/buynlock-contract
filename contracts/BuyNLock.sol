@@ -13,7 +13,7 @@ contract BuyNLock is Ownable, Pausable {
     using SafeCast for uint256;
 
     uint256 constant MAX_LOCK_TIME = 60 * 60 * 24 * 60; // 60 days
-    uint256 constant MAX_UNLOCKS_PER_TX = 1000;
+    uint256 constant MAX_UNLOCKS_PER_TX = 500;
 
     address[] public swapPath;
     uint24 public lockTime;
