@@ -1,6 +1,6 @@
 async function main() {
     const swapPath = [];
-    const lockTime = 0;
+    const lockTime = 60 * 60 * 24 * 10;
     const uniswapRouter = "";
 
     const BuyNLock = await ethers.getContractFactory("BuyNLock");

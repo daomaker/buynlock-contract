@@ -5,13 +5,21 @@ require("hardhat-gas-reporter");
 require("hardhat-abi-exporter");
 
 module.exports = {
-    solidity: "0.8.4",
-    hardhat: {
-        forking: {
-            url: `https://eth-kovan.alchemyapi.io/v2/${process.env.ALCHEMY_KEY}`,
+    solidity: {
+        version: "0.8.4",
+        settings: {
+            optimizer: {
+                enabled: true,
+                runs: 200
+            }
         }
     },
     networks: {
+        hardhat: {
+            forking: {
+                url: `https://eth-kovan.alchemyapi.io/v2/${process.env.ALCHEMY_KEY}`,
+            }
+        },
         kovan: {
             url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
             accounts: [`0x${process.env.PRIVATE_KEY}`],
