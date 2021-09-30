@@ -13,10 +13,6 @@ describe("BuyNLock smart contract", function() {
     const PRECISION_LOSS = "10000000000000000";
     const MAX_LOCK_TIME = 60 * 60 * 24 * 30;
     const WETH = "0xd0A1E359811322d97991E03f863a0C30C2cF029C";
-
-    const sleep = (s) => {
-        return new Promise(resolve => setTimeout(resolve, s * 1000));
-    }
     
     const parseUnits = (value, type = 0) => {
         let decimals;
@@ -443,6 +439,10 @@ describe("BuyNLock smart contract", function() {
             await buyForETH(user1, 10, [WETH, sellingToken.address, buyingToken.address]);
             await time.increase(time.duration.days(5));
             await unlockBoughtTokens(user1, 11.49, 2);
+        });
+
+        it("The contract has no locked tokens by now", async() => {
+            expect(await buyingToken.balanceOf(contract.address)).to.equal(0);
         });
 
         it("Testing invalid parameters reverts", async() => {
