@@ -60,17 +60,16 @@ contract BuyNLock is Ownable, Pausable {
         emit LockTimeChange(lockTime, _lockTime);
         lockTime = _lockTime;
     }
-    
-    function whitelistSellingToken(IERC20 sellingToken) external onlyOwner {
-        require(sellingToken != buyingToken, "selling token == buying token");
-        sellingToken.safeApprove(address(uniswapRouter), 2 ** 256 - 1);
-    }
 
     function buyForERC20(uint256 amountToSell, uint256 minimumAmountToBuy, address[] calldata swapPath, uint256 swapDeadline) external whenNotPaused {
         require(swapPath.length > 1, "Invalid path length");
         require(swapPath[swapPath.length - 1] == address(buyingToken), "Invalid token out");
         IERC20 sellingToken = IERC20(swapPath[0]);
         require(sellingToken != buyingToken, "selling token == buying token");
+
+        if (sellingToken.allowance(address(this), address(uniswapRouter)) < amountToSell) {
+            sellingToken.approve(address(uniswapRouter), 2 ** 256 - 1);
+        }
 
         sellingToken.safeTransferFrom(msg.sender, address(this), amountToSell);
 

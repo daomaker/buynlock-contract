@@ -223,14 +223,6 @@ describe("BuyNLock smart contract", function() {
     });
 
     describe("Owner functions, access control", async () => {
-        it("Only the owner can whitelist a selling token", async() => {
-            contract = contract.connect(owner);
-            await contract.whitelistSellingToken(sellingToken.address);
-
-            contract = contract.connect(user1);
-            await expect(contract.whitelistSellingToken(buyingToken.address)).to.be.revertedWith("Ownable: caller is not the owner");
-        });
-
         it("Only the owner can change the lock time", async() => {
             contract = contract.connect(owner);
             lockTime /= 2;
