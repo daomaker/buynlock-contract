@@ -12,7 +12,7 @@ describe("BuyNLock smart contract", function() {
     const sellingTokenDecimals = 6;
     const buyingTokenDecimals = 18;
     const PRECISION_LOSS = "10000000000000000";
-    const MAX_LOCK_TIME = 60 * 60 * 24 * 60;
+    const MAX_LOCK_TIME = 60 * 60 * 24 * 30;
 
     const sleep = (s) => {
         return new Promise(resolve => setTimeout(resolve, s * 1000));
@@ -84,8 +84,46 @@ describe("BuyNLock smart contract", function() {
         expect(balance1OfUserAfter).to.equal(balance1OfUserBefore.add(unlockableAmount[0]));
         expect(userLockedAmountAfter).to.equal(userLockedAmountBefore.sub(unlockableAmount[0]));
 
-        // trying to unlock again
         await expect(contract.unlockBoughtTokens(user.address)).to.be.revertedWith("No unlockable amount");
+    }
+
+    const multiUnlockBoughtTokens = async (users, expectedUnlockableAmounts, expectedUnlocksCounts) => {
+        contract = contract.connect(owner);
+        expectedUnlockableAmounts = expectedUnlockableAmounts.map((value) => parseUnits(value, 1));
+
+        const balance1OfContractBefore = await buyingToken.balanceOf(contract.address);
+        const balance1OfUserBefore = [];
+        const userLockedAmountBefore = []
+        const unlockableAmounts = [];
+        let unlockableAmountTotal = ethers.BigNumber.from("0");
+
+        for (const i in users) {
+            const user = users[i];
+            balance1OfUserBefore.push(await buyingToken.balanceOf(user.address));
+            userLockedAmountBefore.push(await contract.getLockedAmount(user.address));
+
+            const unlockableAmount = await contract.getUnlockableAmount(user.address);
+            expect(unlockableAmount[0]).to.closeTo(expectedUnlockableAmounts[i], PRECISION_LOSS);
+            expect(unlockableAmount[1]).to.equal(expectedUnlocksCounts[i]);
+            unlockableAmounts.push(unlockableAmount);
+            unlockableAmountTotal = unlockableAmountTotal.add(unlockableAmount[0]);
+        }
+
+        const userAddresses = users.map((user) => user.address);
+        await contract.multiUnlockBoughtTokens(userAddresses);
+
+        const balance1OfContractAfter = await buyingToken.balanceOf(contract.address);
+        expect(balance1OfContractAfter).to.equal(balance1OfContractBefore.sub(unlockableAmountTotal));
+        for (const i in users) {
+            const user = users[i];
+            const balance1OfUserAfter = await buyingToken.balanceOf(user.address);
+            const userLockedAmountAfter = await contract.getLockedAmount(user.address);
+            
+            expect(balance1OfUserAfter).to.equal(balance1OfUserBefore[i].add(unlockableAmounts[i][0]));
+            expect(userLockedAmountAfter).to.equal(userLockedAmountBefore[i].sub(unlockableAmounts[i][0]));
+
+            await expect(contract.unlockBoughtTokens(user.address)).to.be.revertedWith("No unlockable amount");
+        }
     }
 
     before(async () => {
@@ -186,7 +224,7 @@ describe("BuyNLock smart contract", function() {
         });
     });
 
-    describe("Buying and unlocking", async() => {
+    describe("Buying and unlocking (ERC20 version)", async() => {
         it("Users buy and lock - day 0", async() => {
             await buyNLock(user1, 10);
             await buyNLock(user2, 10);
@@ -263,5 +301,56 @@ describe("BuyNLock smart contract", function() {
             await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, sellingToken.address], deadline)).to.be.revertedWith("Invalid token out");
             await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, buyingToken.address], deadline)).to.be.revertedWith("selling token == buying token");
         });
+    });
+
+    describe("Buying and unlocking with multi claim function (ERC20 version)", async() => {
+        before(async() => {
+            contract = contract.connect(owner);
+            await contract.setLockTime(lockTime);
+        });
+
+        it("Users buy and lock - day 0", async() => {
+            await buyNLock(user1, 10);
+            await buyNLock(user2, 10);
+            await buyNLock(user3, 10);
+        });
+
+        it("Users buy and lock - day 1", async() => {
+            await time.increase(time.duration.days(1));
+            await buyNLock(user1, 10);
+            await buyNLock(user2, 10);
+            await buyNLock(user3, 10);
+        });
+
+        it("Users buy and lock - day 3", async() => {
+            await time.increase(time.duration.days(2));
+            await buyNLock(user1, 10);
+            await buyNLock(user2, 10);
+            await buyNLock(user3, 10);
+        });
+
+        it("Users unlock bought tokens (1 unlock) - day 5", async() => {
+            await time.increase(time.duration.days(2));
+            await multiUnlockBoughtTokens(
+                [user1, user2, user3],
+                [6.59, 6.38, 6.18],
+                [1, 1, 1]
+            );
+        });
+
+        it("Users unlock bought tokens (2 unlocks) - day 10", async() => {
+            await time.increase(time.duration.days(5));
+            await multiUnlockBoughtTokens(
+                [user1, user2, user3],
+                [11.47, 11.13, 10.81],
+                [2, 2, 2]
+            );
+        });
+
+        it("A user buys and locks after the multi unlock", async() => {
+            await buyNLock(user1, 10);
+            await time.increase(time.duration.days(5));
+            await unlockBoughtTokens(user1, 5.02, 1);
+        })
     });
 });

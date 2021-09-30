@@ -33,7 +33,7 @@ contract BuyNLock is Ownable, Pausable {
     mapping(address => User) public users;
 
     event LockTimeChange(uint24 oldLockTime, uint24 newLockTime);
-    event BuyAndLock(address indexed user, IERC20 indexed sellingToken, uint amountSold, uint amountBought);
+    event BuyAndLock(address indexed user, IERC20 indexed sellingToken, uint amountSold, uint amountBought, uint lockedAt);
     event Unlock(address indexed user, uint amountUnlocked, uint numberOfUnlocks);
 
     constructor(IERC20 _buyingToken, uint24 _lockTime, IUniswapV2Router02 _uniswapRouter) {
@@ -83,7 +83,7 @@ contract BuyNLock is Ownable, Pausable {
         uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
         _lockBoughtTokens(amountBought);
 
-        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought);
+        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought, block.timestamp);
     }
 
     function buyForETH(uint256 amountToSell, uint256 minimumAmountToBuy, address[] calldata swapPath, uint256 swapDeadline) external payable whenNotPaused {
@@ -101,7 +101,7 @@ contract BuyNLock is Ownable, Pausable {
         uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
         _lockBoughtTokens(amountBought);
 
-        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought);
+        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought, block.timestamp);
     }
 
     function unlockBoughtTokens(address userAddress) external {
@@ -109,6 +109,17 @@ contract BuyNLock is Ownable, Pausable {
         require(unlockableAmount > 0, "No unlockable amount");
 
         _unlockBoughtTokens(userAddress, unlockableAmount, unlocksCount);
+    }
+
+    function multiUnlockBoughtTokens(address[] calldata userAddresses) external {
+        for (uint256 i = 0; i < userAddresses.length; i++) {
+            address userAddress = userAddresses[i];
+            (uint128 unlockableAmount, uint128 unlocksCount) = getUnlockableAmount(userAddress);
+
+            if (unlockableAmount > 0) {
+                _unlockBoughtTokens(userAddress, unlockableAmount, unlocksCount);
+            }
+        }
     }
 
     // INTERNAL 
