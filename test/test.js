@@ -252,6 +252,7 @@ describe("BuyNLock smart contract", function() {
 
             contract = contract.connect(user1);
             await expect(contract.buyForERC20(parseUnits("5", 0), 0, swapPathERC20, await getDeadline())).to.be.revertedWith("Pausable: paused");
+            await expect(contract.buyForETH(parseUnits("5", 2), 0, swapPathERC20, await getDeadline(), { value: parseUnits("5", 2) })).to.be.revertedWith("Pausable: paused");
 
             contract = contract.connect(owner);
             await contract.unpause();
