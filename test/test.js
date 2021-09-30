@@ -333,8 +333,8 @@ describe("BuyNLock smart contract", function() {
             await sellingToken.approve(contract.address, parseUnits("1", 0));
             await expect(contract.buyForERC20(parseUnits("1", 0), parseUnits("1", 1), swapPathERC20, deadline)).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
             await expect(contract.buyForERC20(parseUnits("1", 0), parseUnits("1", 1), [], deadline)).to.be.revertedWith("Invalid path length");
-            await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, sellingToken.address], deadline)).to.be.revertedWith("Invalid token out");
-            await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, buyingToken.address], deadline)).to.be.revertedWith("selling token == buying token");
+            await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, buyingToken.address, sellingToken.address], deadline)).to.be.revertedWith("Invalid token out");
+            await expect(contract.buyForERC20(parseUnits("1", 0), 0, [buyingToken.address, sellingToken.address, buyingToken.address], deadline)).to.be.revertedWith("selling token == buying token");
         });
     });
 
@@ -444,8 +444,8 @@ describe("BuyNLock smart contract", function() {
             await expect(contract.buyForETH(parseUnits("1", 2), parseUnits("1", 1), swapPathETH, deadline, { value: 0 })).to.be.revertedWith("");
             await expect(contract.buyForETH(parseUnits("1", 2), parseUnits("1", 1), swapPathETH, deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
             await expect(contract.buyForETH(parseUnits("1", 2), parseUnits("1", 1), [], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid path length");
-            await expect(contract.buyForETH(parseUnits("1", 2), 0, [buyingToken.address, sellingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid token out");
-            await expect(contract.buyForETH(parseUnits("1", 2), 0, [buyingToken.address, buyingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("selling token == buying token");
+            await expect(contract.buyForETH(parseUnits("1", 2), 0, [buyingToken.address, buyingToken.address, sellingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid token out");
+            await expect(contract.buyForETH(parseUnits("1", 2), 0, [buyingToken.address, sellingToken.address, buyingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("selling token == buying token");
         });
     });
 });
