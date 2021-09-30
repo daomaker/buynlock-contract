@@ -68,7 +68,7 @@ contract BuyNLock is Ownable, Pausable {
         require(sellingToken != buyingToken, "selling token == buying token");
 
         if (sellingToken.allowance(address(this), address(uniswapRouter)) < amountToSell) {
-            sellingToken.approve(address(uniswapRouter), 2 ** 256 - 1);
+            sellingToken.safeApprove(address(uniswapRouter), 2 ** 256 - 1);
         }
 
         sellingToken.safeTransferFrom(msg.sender, address(this), amountToSell);
