@@ -87,13 +87,13 @@ contract BuyNLock is Ownable, Pausable {
         emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought, block.timestamp);
     }
 
-    function buyForETH(uint256 amountToSell, uint256 minimumAmountToBuy, address[] calldata swapPath, uint256 swapDeadline) external payable whenNotPaused {
+    function buyForETH(uint256 minimumAmountToBuy, address[] calldata swapPath, uint256 swapDeadline) external payable whenNotPaused {
         require(swapPath.length > 1, "Invalid path length");
         require(swapPath[swapPath.length - 1] == address(buyingToken), "Invalid token out");
         IERC20 sellingToken = IERC20(swapPath[0]);
         require(sellingToken != buyingToken, "selling token == buying token");
 
-        uint256[] memory amountsOut = IUniswapV2Router02(uniswapRouter).swapExactETHForTokens{ value: amountToSell }(
+        uint256[] memory amountsOut = IUniswapV2Router02(uniswapRouter).swapExactETHForTokens{ value: msg.value }(
             minimumAmountToBuy, 
             swapPath, 
             address(this), 
@@ -102,7 +102,7 @@ contract BuyNLock is Ownable, Pausable {
         uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
         _lockBoughtTokens(amountBought);
 
-        emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought, block.timestamp);
+        emit BuyAndLock(msg.sender, sellingToken, msg.value, amountBought, block.timestamp);
     }
 
     function unlockBoughtTokens(address userAddress) external {

@@ -74,7 +74,7 @@ describe("BuyNLock smart contract", function() {
         const minAmountToBuy = await getAmountOut(amountToSell, swapPath);
         const deadline = await getDeadline();
 
-        await contract.buyForETH(amountToSell, minAmountToBuy, swapPath, deadline, { value: amountToSell });
+        await contract.buyForETH(minAmountToBuy, swapPath, deadline, { value: amountToSell });
         
         const balance1OfContractAfter = await buyingToken.balanceOf(contract.address);
         const balance0OfUserAfter = ethers.BigNumber.from(await web3.eth.getBalance(user.address));
@@ -252,7 +252,7 @@ describe("BuyNLock smart contract", function() {
 
             contract = contract.connect(user1);
             await expect(contract.buyForERC20(parseUnits("5", 0), 0, swapPathERC20, await getDeadline())).to.be.revertedWith("Pausable: paused");
-            await expect(contract.buyForETH(parseUnits("5", 2), 0, swapPathERC20, await getDeadline(), { value: parseUnits("5", 2) })).to.be.revertedWith("Pausable: paused");
+            await expect(contract.buyForETH(0, swapPathERC20, await getDeadline(), { value: parseUnits("5", 2) })).to.be.revertedWith("Pausable: paused");
 
             contract = contract.connect(owner);
             await contract.unpause();
@@ -439,13 +439,13 @@ describe("BuyNLock smart contract", function() {
             contract = contract.connect(user1);
             const deadline = await getDeadline();
              
-            await expect(contract.buyForETH(0, 0, swapPathETH, 0, { value: 0 })).to.be.revertedWith("UniswapV2Router: EXPIRED");  
-            await expect(contract.buyForETH(0, 0, swapPathETH, deadline, { value: 0 })).to.be.revertedWith("UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT");  
-            await expect(contract.buyForETH(parseUnits("1", 2), parseUnits("1", 1), swapPathETH, deadline, { value: 0 })).to.be.revertedWith("");
-            await expect(contract.buyForETH(parseUnits("1", 2), parseUnits("1", 1), swapPathETH, deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
-            await expect(contract.buyForETH(parseUnits("1", 2), parseUnits("1", 1), [], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid path length");
-            await expect(contract.buyForETH(parseUnits("1", 2), 0, [buyingToken.address, buyingToken.address, sellingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid token out");
-            await expect(contract.buyForETH(parseUnits("1", 2), 0, [buyingToken.address, sellingToken.address, buyingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("selling token == buying token");
+            await expect(contract.buyForETH(0, swapPathETH, 0, { value: 0 })).to.be.revertedWith("UniswapV2Router: EXPIRED");  
+            await expect(contract.buyForETH(0, swapPathETH, deadline, { value: 0 })).to.be.revertedWith("UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT");  
+            await expect(contract.buyForETH(parseUnits("1", 1), swapPathETH, deadline, { value: 0 })).to.be.revertedWith("");
+            await expect(contract.buyForETH(parseUnits("1", 1), swapPathETH, deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT");
+            await expect(contract.buyForETH(parseUnits("1", 1), [], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid path length");
+            await expect(contract.buyForETH(0, [buyingToken.address, buyingToken.address, sellingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("Invalid token out");
+            await expect(contract.buyForETH(0, [buyingToken.address, sellingToken.address, buyingToken.address], deadline, { value: parseUnits("1", 2) })).to.be.revertedWith("selling token == buying token");
         });
     });
 });
