@@ -3,6 +3,7 @@ const { time } = require("@openzeppelin/test-helpers");
 const IUniswapV2Router = require("@uniswap/v2-periphery/build/IUniswapV2Router02.json");
 
 describe("BuyNLock smart contract", function() {
+    this.timeout(30000);
     let owner, user1, user2, user3, contract, buyingToken, sellingToken, uniswapRouter, swapPathERC20, swapPathETH;
 
     let lockTime = 60 * 60 * 24 * 10; // 10 days
@@ -171,7 +172,7 @@ describe("BuyNLock smart contract", function() {
         await buyingToken.transfer(user3.address, userBuyAmount);
 
         uniswapRouter = new ethers.Contract(uniswapRouterAddress, IUniswapV2Router.abi, owner);
-        await uniswapRouter.addLiquidity(
+        await uniswapRouter.addLiquidity( // MOCK1 - MOCK2
             sellingToken.address,
             buyingToken.address,
             parseUnits("500", 0),
@@ -182,11 +183,21 @@ describe("BuyNLock smart contract", function() {
             await getDeadline()
         );
 
-        await uniswapRouter.addLiquidityETH(
+        await uniswapRouter.addLiquidityETH( // ETH - MOCK2
             buyingToken.address,
             parseUnits("500", 1),
             parseUnits("500", 2),
             parseUnits("500", 1),
+            owner.address,
+            await getDeadline(),
+            { value: parseUnits("500", 2) }
+        );
+
+        await uniswapRouter.addLiquidityETH( // ETH - MOCK1
+            sellingToken.address,
+            parseUnits("500", 0),
+            parseUnits("500", 2),
+            parseUnits("500", 0),
             owner.address,
             await getDeadline(),
             { value: parseUnits("500", 2) }
@@ -433,6 +444,13 @@ describe("BuyNLock smart contract", function() {
             await buyForETH(user1, 10);
             await time.increase(time.duration.days(5));
             await unlockBoughtTokens(user1, 11.92, 2);
+        });
+
+        it("A user buys with 3 tokens in swap path", async() => {
+            await buyForERC20(user1, 10, [sellingToken.address, WETH, buyingToken.address]);
+            await buyForETH(user1, 10, [WETH, sellingToken.address, buyingToken.address]);
+            await time.increase(time.duration.days(5));
+            await unlockBoughtTokens(user1, 11.49, 2);
         });
 
         it("Testing invalid parameters reverts", async() => {
