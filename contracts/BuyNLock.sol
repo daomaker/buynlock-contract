@@ -39,6 +39,7 @@ contract BuyNLock is Ownable, Pausable {
     constructor(IERC20 _buyingToken, uint24 _lockTime, IUniswapV2Router02 _uniswapRouter) {
         require(address(_buyingToken) != address(0), "Invalid buying token address");
         require(address(_uniswapRouter) != address(0), "Invalid uniswap router address");
+        require(_lockTime <= MAX_LOCK_TIME, "Lock time > MAX lock time");
 
         buyingToken = _buyingToken;
         lockTime = _lockTime;
