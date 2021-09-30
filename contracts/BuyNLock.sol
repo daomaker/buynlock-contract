@@ -45,13 +45,6 @@ contract BuyNLock is Ownable, Pausable {
         uniswapRouter = _uniswapRouter;
     }
 
-    function setLockTime(uint24 _lockTime) external onlyOwner {
-        require(_lockTime <= MAX_LOCK_TIME, "Lock time > MAX lock time");
-
-        emit LockTimeChange(lockTime, _lockTime);
-        lockTime = _lockTime;
-    }
-
     function pause() external onlyOwner {
         _pause();
     }
@@ -60,6 +53,13 @@ contract BuyNLock is Ownable, Pausable {
         _unpause();
     }
 
+    function setLockTime(uint24 _lockTime) external onlyOwner {
+        require(_lockTime <= MAX_LOCK_TIME, "Lock time > MAX lock time");
+
+        emit LockTimeChange(lockTime, _lockTime);
+        lockTime = _lockTime;
+    }
+    
     function whitelistSellingToken(IERC20 sellingToken) external onlyOwner {
         require(sellingToken != buyingToken, "selling token == buying token");
         sellingToken.safeApprove(address(uniswapRouter), 2 ** 256 - 1);
@@ -132,16 +132,22 @@ contract BuyNLock is Ownable, Pausable {
     function getUnlockableAmount(address userAddress) public view returns (uint128, uint128) {
         User storage user = users[userAddress];
         uint128 indexToUnlock = user.indexToUnlock;
-        uint256 locksLength = user.locks.length;
+        uint128 locksLength = uint128(user.locks.length);
         uint128 unlocksCount = 0;
         uint128 unlockableAmount = 0;
+        uint24 _lockTime = lockTime;
 
-        while (indexToUnlock + unlocksCount < locksLength && unlocksCount < MAX_UNLOCKS_PER_TX) {
-            Lock storage lock = user.locks[indexToUnlock + unlocksCount];
-            if (block.timestamp < lock.lockedAt + lockTime) break;
+        if (_lockTime != 0) {
+            while (indexToUnlock + unlocksCount < locksLength && unlocksCount < MAX_UNLOCKS_PER_TX) {
+                Lock storage lock = user.locks[indexToUnlock + unlocksCount];
+                if (block.timestamp < lock.lockedAt + _lockTime) break;
 
-            unlockableAmount += lock.amount;
-            unlocksCount++;
+                unlockableAmount += lock.amount;
+                unlocksCount++;
+            }
+        } else {
+            unlockableAmount = user.lockedAmountTotal;
+            unlocksCount = locksLength - indexToUnlock;
         }
 
         return (unlockableAmount, unlocksCount);
