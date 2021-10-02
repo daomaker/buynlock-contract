@@ -73,14 +73,15 @@ contract BuyNLock is Ownable, Pausable {
 
         sellingToken.safeTransferFrom(msg.sender, address(this), amountToSell);
 
-        uint256[] memory amountsOut = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(
+        uint256 buyingTokenBalanceBefore = buyingToken.balanceOf(address(this));
+        IUniswapV2Router02(uniswapRouter).swapExactTokensForTokensSupportingFeeOnTransferTokens(
             amountToSell, 
             minimumAmountToBuy, 
             swapPath, 
             address(this), 
             swapDeadline
         );
-        uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
+        uint128 amountBought = (buyingToken.balanceOf(address(this)) - buyingTokenBalanceBefore).toUint128();
         _lockBoughtTokens(amountBought);
 
         emit BuyAndLock(msg.sender, sellingToken, amountToSell, amountBought, block.timestamp);
@@ -92,13 +93,14 @@ contract BuyNLock is Ownable, Pausable {
         IERC20 sellingToken = IERC20(swapPath[0]);
         require(sellingToken != buyingToken, "selling token == buying token");
 
-        uint256[] memory amountsOut = IUniswapV2Router02(uniswapRouter).swapExactETHForTokens{ value: msg.value }(
+        uint256 buyingTokenBalanceBefore = buyingToken.balanceOf(address(this));
+        IUniswapV2Router02(uniswapRouter).swapExactETHForTokensSupportingFeeOnTransferTokens{ value: msg.value }(
             minimumAmountToBuy, 
             swapPath, 
             address(this), 
             swapDeadline
         );
-        uint128 amountBought = amountsOut[amountsOut.length - 1].toUint128();
+        uint128 amountBought = (buyingToken.balanceOf(address(this)) - buyingTokenBalanceBefore).toUint128();
         _lockBoughtTokens(amountBought);
 
         emit BuyAndLock(msg.sender, sellingToken, msg.value, amountBought, block.timestamp);
@@ -164,7 +166,7 @@ contract BuyNLock is Ownable, Pausable {
         return (unlockableAmount, unlocksCount);
     }
 
-    function getLockedAmount(address userAddress) public view returns (uint128) {
+    function getLockedAmount(address userAddress) external view returns (uint128) {
         return users[userAddress].lockedAmountTotal;
     }
 }
